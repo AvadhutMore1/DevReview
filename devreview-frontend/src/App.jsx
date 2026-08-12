@@ -73,8 +73,7 @@ export default function App() {
       if (historyRes.data) setHistory(historyRes.data);
       if (statsRes.data) setStats(statsRes.data);
     } catch (error) {
-      console.error("Error fetching analysis data:", error);
-      setApiError("Backend Server Offline. Local Spring Boot backend is not accessible from Vercel deployment.");
+      console.warn("Backend unaccessible. Running in offline web-demo engine mode.");
     }
   };
 
@@ -90,6 +89,66 @@ export default function App() {
     }
   }, [codeContent, language]);
 
+  // Client-Side Offline Analysis Engine for Vercel Web Demo
+  const runOfflineAnalysis = (code, lang, name) => {
+    const lines = code.split('\n');
+    const issues = [];
+    let deduction = 0;
+
+    lines.forEach((line, idx) => {
+      const lineNum = idx + 1;
+      
+      // Hardcoded secrets / API keys
+      if (/api[_-]?key\s*=\s*["'][^"']+["']/i.test(line) || /secret[_-]?key\s*=\s*["'][^"']+["']/i.test(line)) {
+        issues.push({
+          lineNumber: lineNum,
+          issueType: 'Hardcoded Credentials',
+          severity: 'HIGH',
+          message: 'Hardcoded secret or API key detected in source code.',
+          suggestion: 'Store credentials safely in environment variables (.env).'
+        });
+        deduction += 25;
+      }
+
+      // Empty catch block
+      if (/catch\s*\([^)]+\)\s*\{\s*\}/.test(line) || (line.includes('catch') && lines[idx+1] && lines[idx+1].trim() === '}')) {
+        issues.push({
+          lineNumber: lineNum,
+          issueType: 'Empty Catch Block',
+          severity: 'MEDIUM',
+          message: 'Empty catch block suppresses critical runtime exceptions.',
+          suggestion: 'Log the exception or rethrow it properly.'
+        });
+        deduction += 15;
+      }
+
+      // Print statements / Console logs
+      if (line.includes('System.out.print') || line.includes('print(') || line.includes('console.log(')) {
+        issues.push({
+          lineNumber: lineNum,
+          issueType: 'Console Print Statement',
+          severity: 'LOW',
+          message: 'Raw print/log statements found in application logic.',
+          suggestion: 'Replace stdout prints with a dedicated logger instance.'
+        });
+        deduction += 10;
+      }
+    });
+
+    const qualityScore = Math.max(0, 100 - deduction);
+    const mockReport = {
+      id: Date.now(),
+      fileName: name,
+      language: lang,
+      qualityScore,
+      totalIssues: issues.length,
+      issues,
+      userEmail: user?.email || 'demo@devreview.com'
+    };
+
+    return mockReport;
+  };
+
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -102,7 +161,15 @@ export default function App() {
       setShowAuthModal(false);
       setAuthData({ email: '', password: '', fullName: '' });
     } catch (error) {
-      setAuthError('Backend server is offline (localhost:8081). Deploy backend or run locally to authenticate.');
+      // Offline fallback login for live web demo
+      const demoUser = {
+        fullName: authData.fullName || authData.email.split('@')[0],
+        email: authData.email
+      };
+      setUser(demoUser);
+      localStorage.setItem('devreview_user', JSON.stringify(demoUser));
+      setShowAuthModal(false);
+      setAuthData({ email: '', password: '', fullName: '' });
     }
   };
 
@@ -113,6 +180,8 @@ export default function App() {
 
   const handleAnalyze = async () => {
     setLoading(true);
+    setApiError(null);
+
     try {
       const response = await axios.post(`${API_BASE_URL}/analyze`, {
         fileName,
@@ -123,8 +192,16 @@ export default function App() {
       setCurrentAnalysis(response.data);
       await fetchHistoryAndStats();
     } catch (error) {
-      console.error("Error analyzing code:", error);
-      setApiError("Analysis failed. Spring Boot backend (localhost:8081) is not running or unreachable.");
+      // Fallback to client-side static analysis engine
+      const fallbackReport = runOfflineAnalysis(codeContent, language, fileName);
+      setCurrentAnalysis(fallbackReport);
+      
+      setHistory(prev => [fallbackReport, ...prev]);
+      setStats(prev => ({
+        totalScans: prev.totalScans + 1,
+        averageQualityScore: Math.round((prev.averageQualityScore * prev.totalScans + fallbackReport.qualityScore) / (prev.totalScans + 1)),
+        totalIssuesFound: prev.totalIssuesFound + fallbackReport.totalIssues
+      }));
     } finally {
       setLoading(false);
     }
@@ -138,7 +215,12 @@ export default function App() {
       });
       setCodeContent(response.data);
     } catch (error) {
-      console.error("Error auto-fixing code:", error);
+      // Offline client refactoring
+      let refactored = codeContent;
+      refactored = refactored.replace(/private\s+String\s+apiKey\s*=\s*["'][^"']+["'];/g, 'private String apiKey = System.getenv("API_KEY");');
+      refactored = refactored.replace(/System\.out\.println\(([^)]+)\);/g, 'logger.info($1);');
+      refactored = refactored.replace(/catch\s*\((Exception\s+\w+)\)\s*\{\s*\}/g, 'catch ($1) {\n      logger.error("Error occurred: ", e);\n    }');
+      setCodeContent(refactored);
     }
   };
 
@@ -180,7 +262,7 @@ export default function App() {
             break;
           }
         } catch (e) {
-          // File not present at this specific path; attempt next target file
+          // File not present at this specific path
         }
       }
 
@@ -206,12 +288,12 @@ export default function App() {
     e.stopPropagation();
     try {
       await axios.delete(`${API_BASE_URL}/${id}`);
-      if (currentAnalysis?.id === id) {
-        setCurrentAnalysis(null);
-      }
-      await fetchHistoryAndStats();
     } catch (error) {
-      console.error("Error deleting analysis:", error);
+      console.warn("Deleting local session item");
+    }
+    setHistory(prev => prev.filter(item => item.id !== id));
+    if (currentAnalysis?.id === id) {
+      setCurrentAnalysis(null);
     }
   };
 
