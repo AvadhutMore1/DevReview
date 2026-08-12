@@ -74,7 +74,7 @@ export default function App() {
       if (statsRes.data) setStats(statsRes.data);
     } catch (error) {
       console.error("Error fetching analysis data:", error);
-      setApiError("Backend Connection Failed. Check if Spring Boot is running on port 8081.");
+      setApiError("Backend Server Offline. Local Spring Boot backend is not accessible from Vercel deployment.");
     }
   };
 
@@ -102,7 +102,7 @@ export default function App() {
       setShowAuthModal(false);
       setAuthData({ email: '', password: '', fullName: '' });
     } catch (error) {
-      setAuthError(error.response?.data || 'Authentication failed. Please try again.');
+      setAuthError('Backend server is offline (localhost:8081). Deploy backend or run locally to authenticate.');
     }
   };
 
@@ -124,7 +124,7 @@ export default function App() {
       await fetchHistoryAndStats();
     } catch (error) {
       console.error("Error analyzing code:", error);
-      setApiError("Analysis failed. Backend endpoint not responding.");
+      setApiError("Analysis failed. Spring Boot backend (localhost:8081) is not running or unreachable.");
     } finally {
       setLoading(false);
     }
@@ -160,11 +160,9 @@ export default function App() {
       const owner = parts[0];
       const repo = parts[1];
 
-      // 1. Fetch repository details to identify the default branch
       const repoRes = await axios.get(`https://api.github.com/repos/${owner}/${repo}`);
       const defaultBranch = repoRes.data.default_branch || 'main';
 
-      // 2. Fallback list of standard source file paths to attempt loading
       const targetFiles = [
         'src/App.jsx', 'src/App.js', 'src/index.js', 'src/main.js',
         'main.py', 'app.py', 'index.js', 'App.js', 'UserService.java'
@@ -269,7 +267,7 @@ export default function App() {
       </header>
 
       {apiError && (
-        <div className="bg-rose-500/10 border-b border-rose-500/30 text-rose-400 px-6 py-2 text-xs text-center font-semibold">
+        <div className="bg-amber-500/10 border-b border-amber-500/30 text-amber-400 px-6 py-2 text-xs text-center font-semibold">
           ⚠️ {apiError}
         </div>
       )}
