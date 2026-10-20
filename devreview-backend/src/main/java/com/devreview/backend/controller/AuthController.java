@@ -6,9 +6,12 @@ import com.devreview.backend.model.User;
 import com.devreview.backend.repository.UserRepository;
 import com.devreview.backend.security.JwtUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -26,15 +29,22 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody AuthRequest request) {
+    public ResponseEntity<?> register(@Valid @RequestBody AuthRequest request) {
+        String fullName = request.getFullName() == null ? "" : request.getFullName().trim();
+        if (fullName.length() < 2) {
+            return ResponseEntity.badRequest().body(Map.of("fullName", "Full name must contain at least 2 characters."));
+        }
+        if (request.getPassword().length() < 8) {
+            return ResponseEntity.badRequest().body(Map.of("password", "Password must contain at least 8 characters."));
+        }
         if (userRepository.existsByEmail(request.getEmail())) {
-            return ResponseEntity.badRequest().body("Email already in use.");
+            return ResponseEntity.badRequest().body(Map.of("email", "Email already in use."));
         }
 
         User user = new User(
                 request.getEmail(),
                 passwordEncoder.encode(request.getPassword()),
-                request.getFullName()
+                fullName
         );
         userRepository.save(user);
 
@@ -43,7 +53,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody AuthRequest request) {
+    public ResponseEntity<?> login(@Valid @RequestBody AuthRequest request) {
         User user = userRepository.findByEmail(request.getEmail()).orElse(null);
 
         if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {

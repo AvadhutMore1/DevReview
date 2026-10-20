@@ -6,6 +6,7 @@ import com.devreview.backend.model.CodeAnalysis;
 import com.devreview.backend.repository.CodeAnalysisRepository;
 import com.devreview.backend.service.CodeAnalyzerService;
 import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,7 +27,7 @@ public class CodeAnalysisController {
     }
 
     @PostMapping("/analyze")
-    public ResponseEntity<CodeAnalysis> analyzeCode(@RequestBody AnalysisRequest request) {
+    public ResponseEntity<CodeAnalysis> analyzeCode(@Valid @RequestBody AnalysisRequest request) {
         CodeAnalysis result = codeAnalyzerService.analyzeCode(
                 request.getFileName(),
                 request.getLanguage(),
